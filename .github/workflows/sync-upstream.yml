@@ -1,0 +1,56 @@
+
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download official source
+        run: |
+          curl -fL --retry 3 \
+            https://github.com/mmwx-group/mmwx-probe/archive/refs/heads/main.tar.gz \
+            -o /tmp/mmwx-probe.tar.gz
+
+          mkdir -p /tmp/mmwx-upstream
+          tar -xzf /tmp/mmwx-probe.tar.gz \
+            -C /tmp/mmwx-upstream --strip-components=1
+
+      - name: Synchronize source files
+        run: |
+          rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.dev.vars' \
+            /tmp/mmwx-upstream/ ./
+
+      - name: Commit and push updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Already up to date"
+            exit 0
+          fi
+
+          git commit -m "chore: sync official MMWX Probe"
+          git push origin HEAD:main
